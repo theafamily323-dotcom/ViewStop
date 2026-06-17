@@ -3,57 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ViewStop - Share & Idol</title>
-    <link rel="stylesheet" href="style.css">
+    <title>ViewStop - Simple Test</title>
+    <style>
+        body { background: #121212; color: white; font-family: sans-serif; text-align: center; padding: 50px; }
+        button { background: #4285F4; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 5px; cursor: pointer; margin: 20px; }
+        button:hover { background: #357ae8; }
+        #videoPlayerSection { display: none; margin-top: 30px; }
+        video { border: 2px solid #4285F4; border-radius: 8px; width: 100%; max-width: 600px; }
+    </style>
 </head>
 <body>
 
-    <header>
-        <h1 id="logo" style="cursor: pointer;">🎬 ViewStop</h1>
-        <!-- Auth Bar -->
-        <div id="authBar">
-            <span id="userGreeting"></span>
-            <div id="authInputs">
-                <input type="email" id="authEmail" placeholder="Email">
-                <input type="password" id="authPassword" placeholder="Password">
-                <button id="signUpBtn">Sign Up</button>
-                <button id="loginBtn">Log In</button>
-            </div>
-            <button id="logoutBtn" style="display: none;">Log Out</button>
-        </div>
-    </header>
+    <h1>🎬 Welcome to ViewStop</h1>
+    <p id="status">Please sign in to watch and interact with videos!</p>
+    
+    <button id="googleLoginBtn">Sign In with Google</button>
+    <button id="logoutBtn" style="display: none;">Log Out</button>
 
-    <!-- HOME VIEW -->
-    <div id="homeView" class="view">
-        <!-- Upload Section (Locked if logged out) -->
-        <section class="upload-section" id="uploadSection">
-            <h2>Upload to ViewStop</h2>
-            <div id="uploadLockedMessage">⚠️ Please log in or create an account to publish videos!</div>
-            <div id="uploadFields" style="display: none;">
-                <input type="text" id="videoTitle" placeholder="Enter video title..." required>
-                <input type="file" id="videoFile" accept="video/*" required>
-                <button id="uploadBtn">Publish Video</button>
-                <div id="uploadStatus"></div>
-            </div>
-        </section>
-
-        <hr>
-
-        <section class="feed-section">
-            <h2>Public Feed</h2>
-            <div id="videoFeed"></div>
-        </section>
+    <div id="videoPlayerSection">
+        <h2>🔥 Trending Video</h2>
+        <video src="https://www.w3schools.com/html/mov_bbb.mp4" controls></video>
+        <br>
+        <button id="likeBtn">❤️ Like</button>
+        <button id="idolBtn" style="background: #eccc68; color: #333;">🌟 Idol</button>
     </div>
 
-    <!-- DEDICATED VIDEO VIEW -->
-    <div id="videoView" class="view" style="display: none;">
-        <button id="backHomeBtn">⬅️ Back to Home</button>
-        <div id="singleVideoContainer">
-            <!-- Focused video player logic will load here dynamically -->
-        </div>
-    </div>
-
-    <!-- Firebase SDK Modules -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
