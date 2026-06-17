@@ -1,8 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, increment, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, getDocs, getDoc, updateDoc, doc, increment, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// YOUR FIREBASE CONFIG (Copy this from your Firebase Console)
+// YOUR FIREBASE CONFIG (Paste your config from Firebase Console here)
 const firebaseConfig = {
     apiKey: "YOUR_API_KEY",
     authDomain: "YOUR_AUTH_DOMAIN",
@@ -12,97 +13,213 @@ const firebaseConfig = {
     appId: "YOUR_APP_ID"
 };
 
-// Initialize Firebase
+// Initialize Firebase Core services
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const auth = getAuth(app);
 
-// DOM Elements
+// Global State
+let currentUser = null;
+
+// DOM Elements - Auth
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const signUpBtn = document.getElementById('signUpBtn');
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const authInputs = document.getElementById('authInputs');
+const userGreeting = document.getElementById('userGreeting');
+
+// DOM Elements - Views & Feed
+const homeView = document.getElementById('homeView');
+const videoView = document.getElementById('videoView');
+const uploadFields = document.getElementById('uploadFields');
+const uploadLockedMessage = document.getElementById('uploadLockedMessage');
+const videoFeed = document.getElementById('videoFeed');
+const singleVideoContainer = document.getElementById('singleVideoContainer');
+const backHomeBtn = document.getElementById('backHomeBtn');
+const logo = document.getElementById('logo');
+
+// DOM Elements - Uploading
 const uploadBtn = document.getElementById('uploadBtn');
 const videoTitleInput = document.getElementById('videoTitle');
 const videoFileInput = document.getElementById('videoFile');
 const uploadStatus = document.getElementById('uploadStatus');
-const videoFeed = document.getElementById('videoFeed');
 
-// 1. UPLOAD VIDEO & SAVE METADATA
+---
+// 🔐 AUTHENTICATION LOGIC
+---
+// Sign Up
+signUpBtn.addEventListener('click', async () => {
+    const email = authEmail.value;
+    const password = authPassword.value;
+    try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        alert("Account created successfully!");
+    } catch (err) { alert(err.message); }
+});
+
+// Log In
+loginBtn.addEventListener('click', async () => {
+    const email = authEmail.value;
+    const password = authPassword.value;
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) { alert(err.message); }
+});
+
+// Log Out
+logoutBtn.addEventListener('click', () => signOut(auth));
+
+// Track Auth Status (Determines what users can see and do)
+onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    if (user) {
+        userGreeting.innerText = `Logged in as: ${user.email} `;
+        authInputs.style.display = 'none';
+        logoutBtn.style.display = 'inline-block';
+        uploadFields.style.display = 'block';
+        uploadLockedMessage.style.display = 'none';
+    } else {
+        userGreeting.innerText = "";
+        authInputs.style.display = 'block';
+        logoutBtn.style.display = 'none';
+        uploadFields.style.display = 'none';
+        uploadLockedMessage.style.display = 'block';
+    }
+    loadFeed(); // Refresh view numbers if user logs in/out
+});
+
+---
+// 📹 VIDEO UPLOAD LOGIC
+---
 uploadBtn.addEventListener('click', () => {
+    if (!currentUser) return alert("You must be logged in to post!");
+    
     const title = videoTitleInput.value;
     const file = videoFileInput.files[0];
 
     if (!title || !file) {
-        alert("Please provide both a title and a video file!");
+        alert("Please include both a title and a video file!");
         return;
     }
 
-    // Create a unique storage reference for the video file
     const storageRef = ref(storage, `videos/${Date.now()}_${file.name}`);
     const uploadTask = uploadBytesResumable(storageRef, file);
 
-    uploadStatus.innerText = "Uploading video file...";
+    uploadStatus.innerText = "Uploading your file to ViewStop live storage...";
 
-    uploadTask.on('state_changed', 
-        (snapshot) => {
-            // Track progress if wanted
-        }, 
-        (error) => {
-            uploadStatus.innerText = `Upload failed: ${error.message}`;
-        }, 
+    uploadTask.on('state_changed', null, 
+        (error) => { uploadStatus.innerText = `Upload Error: ${error.message}`; }, 
         async () => {
-            // Get the public live URL of the uploaded video
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            
-            // Save the details to Firestore database
             try {
                 await addDoc(collection(db, "posts"), {
                     title: title,
                     videoUrl: downloadURL,
+                    creator: currentUser.email,
                     likes: 0,
                     idols: 0,
                     createdAt: new Date()
                 });
-                uploadStatus.innerText = "Successfully published to ViewStop!";
+                uploadStatus.innerText = "🚀 Published successfully!";
                 videoTitleInput.value = '';
                 videoFileInput.value = '';
-                loadFeed(); // Refresh the feed
-            } catch (e) {
-                uploadStatus.innerText = "Database error: " + e.message;
-            }
+                loadFeed();
+            } catch (e) { uploadStatus.innerText = "Database error: " + e.message; }
         }
     );
 });
 
-// 2. FETCH AND DISPLAY FEED
+---
+// 🎬 NAVIGATION & FEED DISPLAY
+---
+// Fetch All Videos For Home Feed
 async function loadFeed() {
     videoFeed.innerHTML = '';
-    const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
+    try {
+        const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+        const querySnapshot = await getDocs(q);
 
-    querySnapshot.forEach((docSnap) => {
-        const post = docSnap.data();
-        const postId = docSnap.id;
+        querySnapshot.forEach((docSnap) => {
+            const post = docSnap.data();
+            const postId = docSnap.id;
 
-        const postCard = document.createElement('div');
-        postCard.className = 'video-card';
-        postCard.innerHTML = `
-            <h3>${post.title}</h3>
-            <video src="${post.videoUrl}" controls width="100%"></video>
-            <div class="actions">
-                <button onclick="window.interaction('${postId}', 'likes')">❤️ Like (${post.likes})</button>
-                <button onclick="window.interaction('${postId}', 'idols')" class="idol-btn">🌟 Idol (${post.idols})</button>
-            </div>
-        `;
-        videoFeed.appendChild(postCard);
-    });
+            const card = document.createElement('div');
+            card.className = 'video-card-preview';
+            card.innerHTML = `
+                <div class="preview-thumbnail">▶️ Watch Video</div>
+                <h3>${post.title}</h3>
+                <p class="meta">Posted by: ${post.creator.split('@')[0]}</p>
+                <div class="counts">❤️ ${post.likes} | 🌟 ${post.idols} Idols</div>
+            `;
+            // Click anywhere on the preview card to open dedicated view
+            card.addEventListener('click', () => showVideoPage(postId));
+            videoFeed.appendChild(card);
+        });
+    } catch (e) { console.error("Error loading feed: ", e); }
 }
 
-// 3. HANDLE LIKES AND IDOLS
-window.interaction = async (id, type) => {
-    const postRef = doc(db, "posts", id);
+// Switch View to Dedicated Video Page
+async function showVideoPage(postId) {
+    homeView.style.display = 'none';
+    videoView.style.display = 'block';
+    singleVideoContainer.innerHTML = "Loading video details...";
+
+    const docRef = doc(db, "posts", postId);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+        const post = docSnap.data();
+        singleVideoContainer.innerHTML = `
+            <div class="focused-player">
+                <h2>${post.title}</h2>
+                <p class="meta">Creator: ${post.creator}</p>
+                <video src="${post.videoUrl}" controls autoplay width="100%"></video>
+                <div class="focused-actions">
+                    <button id="likeBtn">❤️ Like (<span id="likeCount">${post.likes}</span>)</button>
+                    <button id="idolBtn" class="idol-btn">🌟 Idol (<span id="idolCount">${post.idols}</span>)</button>
+                </div>
+            </div>
+        `;
+
+        // Wire up interaction events directly inside the dedicated view
+        document.getElementById('likeBtn').addEventListener('click', () => handleInteraction(postId, 'likes', 'likeCount'));
+        document.getElementById('idolBtn').addEventListener('click', () => handleInteraction(postId, 'idols', 'idolCount'));
+    } else {
+        singleVideoContainer.innerHTML = "Video not found.";
+    }
+}
+
+// Handle Like/Idol Actions safely
+async function handleInteraction(postId, type, fieldId) {
+    if (!currentUser) {
+        alert(`You must be logged in to ${type === 'likes' ? 'Like' : 'Idol'} this creator!`);
+        return;
+    }
+
+    const postRef = doc(db, "posts", postId);
     await updateDoc(postRef, {
         [type]: increment(1)
     });
-    loadFeed(); // Refresh numbers on screen
-};
 
-// Load feed on startup
+    // Dynamically update the count display on the screen
+    const displayElement = document.getElementById(fieldId);
+    if (displayElement) {
+        displayElement.innerText = parseInt(displayElement.innerText) + 1;
+    }
+}
+
+// Return To Home Routing
+function goHome() {
+    videoView.style.display = 'none';
+    homeView.style.display = 'block';
+    loadFeed(); // Refresh stats on home list
+}
+
+backHomeBtn.addEventListener('click', goHome);
+logo.addEventListener('click', goHome);
+
+// Initial Load
 loadFeed();
